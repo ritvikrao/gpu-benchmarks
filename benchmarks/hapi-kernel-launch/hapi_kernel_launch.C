@@ -58,9 +58,9 @@ static int parseIntArg(CkArgMsg* msg, const char* name, int defaultValue) {
 /*readonly*/ int gLeagueSize;
 /*readonly*/ int gTeamSize;
 
-constexpr int kDefaultA40SmCount = 84;
-constexpr int kDefaultA40ThreadsPerSm = 1536;
-constexpr int kDefaultA40BlocksPerSm = 16;
+constexpr int kDefaultSmCount = 84;
+constexpr int kDefaultThreadsPerSm = 1536;
+constexpr int kDefaultBlocksPerSm = 16;
 
 class Main : public CBase_Main {
  public:
@@ -69,9 +69,9 @@ class Main : public CBase_Main {
 
     const int charesPerThread = parseIntArg(msg, "--chares-per-thread", 1);
     durationSeconds_ = parseIntArg(msg, "--duration-seconds", 10);
-    const int smCount = parseIntArg(msg, "--sms", kDefaultA40SmCount);
-    const int threadsPerSm = parseIntArg(msg, "--threads-per-sm", kDefaultA40ThreadsPerSm);
-    const int blocksPerSm = parseIntArg(msg, "--blocks-per-sm", kDefaultA40BlocksPerSm);
+    const int smCount = parseIntArg(msg, "--sms", kDefaultSmCount);
+    const int threadsPerSm = parseIntArg(msg, "--threads-per-sm", kDefaultThreadsPerSm);
+    const int blocksPerSm = parseIntArg(msg, "--blocks-per-sm", kDefaultBlocksPerSm);
     if (charesPerThread <= 0 || durationSeconds_ <= 0 || smCount <= 0 || threadsPerSm <= 0 || blocksPerSm <= 0) {
       CkAbort("All benchmark configuration arguments must be positive.");
     }
@@ -151,8 +151,9 @@ class BenchmarkChare : public CBase_BenchmarkChare {
 
     ExecSpace exec(stream_);
     Kokkos::parallel_for(
-        "hapi_kernel_launch",
+        "noop_launch_kernel",
         Kokkos::TeamPolicy<ExecSpace>(exec, gLeagueSize, gTeamSize),
+        // Intentionally empty kernel body to measure launch-rate overhead.
         KOKKOS_LAMBDA(const typename Kokkos::TeamPolicy<ExecSpace>::member_type& /* team */) {
         });
 
