@@ -12,14 +12,34 @@
 #if defined(BENCHMARK_USE_CUDA)
 #include <cuda_runtime.h>
 using NativeStream = cudaStream_t;
-static void createStream(NativeStream* stream) { cudaStreamCreateWithFlags(stream, cudaStreamNonBlocking); }
-static void destroyStream(NativeStream stream) { cudaStreamDestroy(stream); }
+static void createStream(NativeStream* stream) {
+  const auto status = cudaStreamCreateWithFlags(stream, cudaStreamNonBlocking);
+  if (status != cudaSuccess) {
+    CkAbort(cudaGetErrorString(status));
+  }
+}
+static void destroyStream(NativeStream stream) {
+  const auto status = cudaStreamDestroy(stream);
+  if (status != cudaSuccess) {
+    CkAbort(cudaGetErrorString(status));
+  }
+}
 using ExecSpace = Kokkos::Cuda;
 #elif defined(BENCHMARK_USE_HIP)
 #include <hip/hip_runtime.h>
 using NativeStream = hipStream_t;
-static void createStream(NativeStream* stream) { hipStreamCreateWithFlags(stream, hipStreamNonBlocking); }
-static void destroyStream(NativeStream stream) { hipStreamDestroy(stream); }
+static void createStream(NativeStream* stream) {
+  const auto status = hipStreamCreateWithFlags(stream, hipStreamNonBlocking);
+  if (status != hipSuccess) {
+    CkAbort(hipGetErrorString(status));
+  }
+}
+static void destroyStream(NativeStream stream) {
+  const auto status = hipStreamDestroy(stream);
+  if (status != hipSuccess) {
+    CkAbort(hipGetErrorString(status));
+  }
+}
 using ExecSpace = Kokkos::HIP;
 #else
 #error "Define BENCHMARK_USE_CUDA or BENCHMARK_USE_HIP"
@@ -48,11 +68,14 @@ class Main : public CBase_Main {
     const int sms = parseIntArg(msg, "--sms", 84);
     const int threadsPerSm = parseIntArg(msg, "--threads-per-sm", 1536);
     const int blocksPerSm = parseIntArg(msg, "--blocks-per-sm", 16);
+    if (charesPerThread <= 0 || durationSeconds_ <= 0 || sms <= 0 || threadsPerSm <= 0 || blocksPerSm <= 0) {
+      CkAbort("All benchmark configuration arguments must be positive.");
+    }
 
     const int threads = std::max(1, CkMyNodeSize());
     const int totalChares = std::max(1, threads * charesPerThread);
     const int totalBlocks = std::max(1, sms * blocksPerSm);
-    const int teamSize = std::max(1, threadsPerSm / blocksPerSm);
+    const int teamSize = std::max(1, (threadsPerSm + blocksPerSm - 1) / blocksPerSm);
 
     CkPrintf("Launching benchmark with %d threads and %d chares (%d per thread)\n", threads, totalChares,
              charesPerThread);
@@ -124,7 +147,7 @@ class BenchmarkChare : public CBase_BenchmarkChare {
         "hapi_kernel_launch",
         Kokkos::TeamPolicy<ExecSpace>(exec, gLeagueSize, gTeamSize),
         KOKKOS_LAMBDA(const typename Kokkos::TeamPolicy<ExecSpace>::member_type& team) {
-          Kokkos::parallel_for(Kokkos::ThreadVectorRange(team, 1), [&](int) {});
+          (void)team;
         });
 
     ++launchCount_;
@@ -136,7 +159,8 @@ class BenchmarkChare : public CBase_BenchmarkChare {
     if (contributed_) return;
     contributed_ = true;
     long long local = launchCount_;
-    contribute(sizeof(long long), &local, CkReduction::sum_long_long, CkCallback(CkReductionTarget(Main, onReduction), mainProxy_));
+    contribute(sizeof(long long), &local, CkReduction::sum_long_long,
+               CkCallback(CkReductionTarget(Main, onReduction), mainProxy_));
   }
 
   CProxy_Main mainProxy_;
