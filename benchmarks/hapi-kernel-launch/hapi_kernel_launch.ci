@@ -1,0 +1,17 @@
+module HapiKernelLaunch {
+  readonly int gLeagueSize;
+  readonly int gTeamSize;
+
+  mainchare Main {
+    entry Main(CkArgMsg* msg);
+    entry void stopLaunches();
+    entry void onReduction(CkReductionMsg* msg);
+  };
+
+  array [1D] BenchmarkChare {
+    entry BenchmarkChare();
+    entry void start();
+    entry void launchNext();
+    entry void stop();
+  };
+};
