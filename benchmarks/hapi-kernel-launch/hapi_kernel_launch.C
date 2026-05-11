@@ -113,7 +113,10 @@ class Main : public CBase_Main {
   }
 
  private:
-  static void timerThunk(void* arg, double) { static_cast<Main*>(arg)->thisProxy.stopLaunches(); }
+  static void timerThunk(void* arg, double unusedDelayMs) {
+    (void)unusedDelayMs;
+    static_cast<Main*>(arg)->thisProxy.stopLaunches();
+  }
 
   CProxy_BenchmarkChare chares_;
   double startTime_ = 0.0;
@@ -146,8 +149,7 @@ class BenchmarkChare : public CBase_BenchmarkChare {
     Kokkos::parallel_for(
         "hapi_kernel_launch",
         Kokkos::TeamPolicy<ExecSpace>(exec, gLeagueSize, gTeamSize),
-        KOKKOS_LAMBDA(const typename Kokkos::TeamPolicy<ExecSpace>::member_type& team) {
-          (void)team;
+        KOKKOS_LAMBDA(const typename Kokkos::TeamPolicy<ExecSpace>::member_type& /* team */) {
         });
 
     ++launchCount_;
