@@ -58,6 +58,10 @@ static int parseIntArg(CkArgMsg* msg, const char* name, int defaultValue) {
 /*readonly*/ int gLeagueSize;
 /*readonly*/ int gTeamSize;
 
+constexpr int kDefaultA40SmCount = 84;
+constexpr int kDefaultA40ThreadsPerSm = 1536;
+constexpr int kDefaultA40BlocksPerSm = 16;
+
 class Main : public CBase_Main {
  public:
   Main(CkArgMsg* msg) {
@@ -65,16 +69,16 @@ class Main : public CBase_Main {
 
     const int charesPerThread = parseIntArg(msg, "--chares-per-thread", 1);
     durationSeconds_ = parseIntArg(msg, "--duration-seconds", 10);
-    const int sms = parseIntArg(msg, "--sms", 84);
-    const int threadsPerSm = parseIntArg(msg, "--threads-per-sm", 1536);
-    const int blocksPerSm = parseIntArg(msg, "--blocks-per-sm", 16);
-    if (charesPerThread <= 0 || durationSeconds_ <= 0 || sms <= 0 || threadsPerSm <= 0 || blocksPerSm <= 0) {
+    const int smCount = parseIntArg(msg, "--sms", kDefaultA40SmCount);
+    const int threadsPerSm = parseIntArg(msg, "--threads-per-sm", kDefaultA40ThreadsPerSm);
+    const int blocksPerSm = parseIntArg(msg, "--blocks-per-sm", kDefaultA40BlocksPerSm);
+    if (charesPerThread <= 0 || durationSeconds_ <= 0 || smCount <= 0 || threadsPerSm <= 0 || blocksPerSm <= 0) {
       CkAbort("All benchmark configuration arguments must be positive.");
     }
 
     const int threads = std::max(1, CkMyNodeSize());
     const int totalChares = std::max(1, threads * charesPerThread);
-    const int totalBlocks = std::max(1, sms * blocksPerSm);
+    const int totalBlocks = std::max(1, smCount * blocksPerSm);
     const int teamSize = std::max(1, (threadsPerSm + blocksPerSm - 1) / blocksPerSm);
 
     CkPrintf("Launching benchmark with %d threads and %d chares (%d per thread)\n", threads, totalChares,
