@@ -118,8 +118,7 @@ class Main : public CBase_Main {
   }
 
  private:
-  static void timerThunk(void* arg, double unusedDelayMs) {
-    (void)unusedDelayMs;
+  static void timerThunk(void* arg, [[maybe_unused]] double unusedDelayMs) {
     static_cast<Main*>(arg)->thisProxy.stopLaunches();
   }
 
@@ -155,7 +154,7 @@ class BenchmarkChare : public CBase_BenchmarkChare {
         "noop_launch_kernel",
         Kokkos::TeamPolicy<ExecSpace>(exec, gLeagueSize, gTeamSize),
         // Intentionally empty kernel body to measure launch-rate overhead.
-        KOKKOS_LAMBDA([[maybe_unused]] const typename Kokkos::TeamPolicy<ExecSpace>::member_type& member) {
+        KOKKOS_LAMBDA(const typename Kokkos::TeamPolicy<ExecSpace>::member_type&) {
         });
 
     ++launchCount_;
