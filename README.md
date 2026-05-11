@@ -26,5 +26,5 @@ Set `-DBENCHMARK_BACKEND=HIP` to build the HIP variant.
 Example run (10 seconds by default):
 
 ```bash
-./build/benchmarks/hapi-kernel-launch/hapi_kernel_launch +p4 +ppn 4 --chares-per-thread=1 --duration-seconds=10
+./build/benchmarks/hapi-kernel-launch/hapi_kernel_launch +p4 +ppn 1 --chares-per-thread=1 --duration-seconds=10
 ```

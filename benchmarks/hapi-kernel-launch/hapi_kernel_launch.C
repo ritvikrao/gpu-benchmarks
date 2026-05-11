@@ -79,6 +79,7 @@ class Main : public CBase_Main {
     const int threads = std::max(1, CkMyNodeSize());
     const int totalChares = std::max(1, threads * charesPerThread);
     const int totalBlocks = std::max(1, smCount * blocksPerSm);
+    // Rounded-up division to derive threads-per-block from per-SM occupancy targets.
     const int teamSize = std::max(1, (threadsPerSm + blocksPerSm - 1) / blocksPerSm);
 
     CkPrintf("Launching benchmark with %d threads and %d chares (%d per thread)\n", threads, totalChares,
@@ -154,7 +155,8 @@ class BenchmarkChare : public CBase_BenchmarkChare {
         "noop_launch_kernel",
         Kokkos::TeamPolicy<ExecSpace>(exec, gLeagueSize, gTeamSize),
         // Intentionally empty kernel body to measure launch-rate overhead.
-        KOKKOS_LAMBDA(const typename Kokkos::TeamPolicy<ExecSpace>::member_type& /* team */) {
+        KOKKOS_LAMBDA([[maybe_unused]] const typename Kokkos::TeamPolicy<ExecSpace>::member_type& teamMember) {
+          (void)teamMember;
         });
 
     ++launchCount_;
