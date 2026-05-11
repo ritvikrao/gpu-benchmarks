@@ -155,8 +155,7 @@ class BenchmarkChare : public CBase_BenchmarkChare {
         "noop_launch_kernel",
         Kokkos::TeamPolicy<ExecSpace>(exec, gLeagueSize, gTeamSize),
         // Intentionally empty kernel body to measure launch-rate overhead.
-        KOKKOS_LAMBDA([[maybe_unused]] const typename Kokkos::TeamPolicy<ExecSpace>::member_type& teamMember) {
-          (void)teamMember;
+        KOKKOS_LAMBDA([[maybe_unused]] const typename Kokkos::TeamPolicy<ExecSpace>::member_type& member) {
         });
 
     ++launchCount_;
