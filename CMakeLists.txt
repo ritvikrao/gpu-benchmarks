@@ -20,4 +20,6 @@ if(NOT BENCHMARK_BACKEND STREQUAL "CUDA" AND NOT BENCHMARK_BACKEND STREQUAL "HIP
   message(FATAL_ERROR "BENCHMARK_BACKEND must be CUDA or HIP.")
 endif()
 
+include(${CMAKE_SOURCE_DIR}/cmake/Charm.cmake)
+
 add_subdirectory(benchmarks/hapi-kernel-launch)
