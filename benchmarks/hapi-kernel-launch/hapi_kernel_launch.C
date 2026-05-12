@@ -9,6 +9,9 @@
 #include <converse.h>
 #include <hapi.h>
 
+CProxy_Main mainProxy;
+CProxy_BenchmarkChare charesProxy;
+
 #if defined(BENCHMARK_USE_CUDA)
 #include <cuda_runtime.h>
 using NativeStream = cudaStream_t;
@@ -62,9 +65,22 @@ constexpr int kDefaultSmCount = 84;
 constexpr int kDefaultThreadsPerSm = 1536;
 constexpr int kDefaultBlocksPerSm = 16;
 
+
 class Main : public CBase_Main {
- public:
+
+  private:
+    static void timerThunk(void* arg, [[maybe_unused]] double unusedDelayMs) {
+      static_cast<Main*>(arg)->thisProxy.stopLaunches();
+    }
+
+    CProxy_BenchmarkChare chares_;
+    double startTime_ = 0.0;
+    int durationSeconds_ = 10;
+    bool stopSent_ = false;
+
+  public:
   Main(CkArgMsg* msg) {
+    mainProxy = thisProxy;
     Kokkos::initialize();
 
     const int charesPerThread = parseIntArg(msg, "--chares-per-thread", 1);
@@ -90,19 +106,24 @@ class Main : public CBase_Main {
     CkPrintf("Kernel config: league=%d, team=%d, duration=%d seconds\n", gLeagueSize, gTeamSize, durationSeconds_);
 
     CkArrayOptions opts(totalChares);
-    chares_ = CProxy_BenchmarkChare::ckNew(opts);
-    chares_.start();
-
-    startTime_ = CkWallTimer();
-    CcdCallFnAfter(reinterpret_cast<CcdVoidFn>(Main::timerThunk), this, durationSeconds_ * 1000);
+    charesProxy = CProxy_BenchmarkChare::ckNew(opts);
+    // start() and the timer are deferred until all elements have checked in via allCharesReady().
 
     delete msg;
+  }
+
+  void allCharesReady(CkReductionMsg* msg) {
+    delete msg;
+    printf("All chares ready. Starting benchmark...\n");
+    startTime_ = CkWallTimer();
+    CcdCallFnAfter(reinterpret_cast<CcdVoidFn>(Main::timerThunk), this, durationSeconds_ * 1000);
+    charesProxy.start();
   }
 
   void stopLaunches() {
     if (stopSent_) return;
     stopSent_ = true;
-    chares_.stop();
+    charesProxy.stop();
   }
 
   void onReduction(CkReductionMsg* msg) {
@@ -117,20 +138,14 @@ class Main : public CBase_Main {
     CkExit();
   }
 
- private:
-  static void timerThunk(void* arg, [[maybe_unused]] double unusedDelayMs) {
-    static_cast<Main*>(arg)->thisProxy.stopLaunches();
-  }
-
-  CProxy_BenchmarkChare chares_;
-  double startTime_ = 0.0;
-  int durationSeconds_ = 10;
-  bool stopSent_ = false;
 };
 
 class BenchmarkChare : public CBase_BenchmarkChare {
  public:
-  BenchmarkChare() : mainProxy_(CProxy_Main(0)) { createStream(&stream_); }
+  BenchmarkChare() {
+    createStream(&stream_);
+    contribute(CkCallback(CkReductionTarget(Main, allCharesReady), mainProxy));
+  }
 
   ~BenchmarkChare() override { destroyStream(stream_); }
 
@@ -167,10 +182,9 @@ class BenchmarkChare : public CBase_BenchmarkChare {
     contributed_ = true;
     long long local = launchCount_;
     contribute(sizeof(long long), &local, CkReduction::sum_long_long,
-               CkCallback(CkReductionTarget(Main, onReduction), mainProxy_));
+               CkCallback(CkReductionTarget(Main, onReduction), mainProxy));
   }
 
-  CProxy_Main mainProxy_;
   NativeStream stream_;
   long long launchCount_ = 0;
   bool stopRequested_ = false;

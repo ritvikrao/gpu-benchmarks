@@ -1,11 +1,13 @@
 mainmodule HapiKernelLaunch {
   readonly int gLeagueSize;
   readonly int gTeamSize;
+  readonly CProxy_Main mainProxy;
 
   mainchare Main {
     entry Main(CkArgMsg* msg);
     entry void stopLaunches();
     entry [reductiontarget] void onReduction(CkReductionMsg* msg);
+    entry [reductiontarget] void allCharesReady(CkReductionMsg* msg);
   };
 
   array [1D] BenchmarkChare {
