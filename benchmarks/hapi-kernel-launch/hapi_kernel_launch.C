@@ -5,6 +5,9 @@
 #include <cstdlib>
 #include <cstring>
 #include <string>
+#if defined(BENCHMARK_ENABLE_SAMPLING)
+#include <vector>
+#endif
 
 #include <converse.h>
 #include <hapi.h>
@@ -58,12 +61,10 @@ static int parseIntArg(CkArgMsg* msg, const char* name, int defaultValue) {
   return defaultValue;
 }
 
-/*readonly*/ int gLeagueSize;
-/*readonly*/ int gTeamSize;
+/*readonly*/ int gRangeSize;
 
 constexpr int kDefaultSmCount = 84;
 constexpr int kDefaultThreadsPerSm = 1536;
-constexpr int kDefaultBlocksPerSm = 16;
 
 
 class Main : public CBase_Main {
@@ -87,23 +88,18 @@ class Main : public CBase_Main {
     durationSeconds_ = parseIntArg(msg, "--duration-seconds", 10);
     const int smCount = parseIntArg(msg, "--sms", kDefaultSmCount);
     const int threadsPerSm = parseIntArg(msg, "--threads-per-sm", kDefaultThreadsPerSm);
-    const int blocksPerSm = parseIntArg(msg, "--blocks-per-sm", kDefaultBlocksPerSm);
-    if (charesPerThread <= 0 || durationSeconds_ <= 0 || smCount <= 0 || threadsPerSm <= 0 || blocksPerSm <= 0) {
+    if (charesPerThread <= 0 || durationSeconds_ <= 0 || smCount <= 0 || threadsPerSm <= 0) {
       CkAbort("All benchmark configuration arguments must be positive.");
     }
 
     const int threads = std::max(1, CkMyNodeSize());
     const int totalChares = std::max(1, threads * charesPerThread);
-    const int totalBlocks = std::max(1, smCount * blocksPerSm);
-    // Rounded-up division to derive threads-per-block from per-SM occupancy targets.
-    const int teamSize = std::max(1, (threadsPerSm + blocksPerSm - 1) / blocksPerSm);
 
     CkPrintf("Launching benchmark with %d threads and %d chares (%d per thread)\n", threads, totalChares,
              charesPerThread);
-    gLeagueSize = totalBlocks;
-    gTeamSize = teamSize;
+    gRangeSize = smCount * threadsPerSm;
 
-    CkPrintf("Kernel config: league=%d, team=%d, duration=%d seconds\n", gLeagueSize, gTeamSize, durationSeconds_);
+    CkPrintf("Kernel config: range=%d, duration=%d seconds\n", gRangeSize, durationSeconds_);
 
     CkArrayOptions opts(totalChares);
     charesProxy = CProxy_BenchmarkChare::ckNew(opts);
@@ -144,6 +140,7 @@ class BenchmarkChare : public CBase_BenchmarkChare {
  public:
   BenchmarkChare() {
     createStream(&stream_);
+    exec_ = ExecSpace(stream_);
     launchNextCb_ = CkCallback(CkIndex_BenchmarkChare::launchNext(), thisProxy[thisIndex]);
     contribute(CkCallback(CkReductionTarget(Main, allCharesReady), mainProxy));
   }
@@ -154,6 +151,12 @@ class BenchmarkChare : public CBase_BenchmarkChare {
     stopRequested_ = false;
     contributed_ = false;
     launchCount_ = 0;
+#if defined(BENCHMARK_ENABLE_SAMPLING)
+    gapSamples_.clear();
+#endif
+#if defined(BENCHMARK_ENABLE_SAMPLING)
+    lastSampleTime_ = CkWallTimer();
+#endif
     launchNext();
   }
 
@@ -165,15 +168,22 @@ class BenchmarkChare : public CBase_BenchmarkChare {
       return;
     }
 
-    ExecSpace exec(stream_);
+    //CkPrintf("Chare %d launching kernel %lld\n", thisIndex, launchCount_);
     Kokkos::parallel_for(
         "noop_launch_kernel",
-        Kokkos::TeamPolicy<ExecSpace>(exec, gLeagueSize, gTeamSize),
+        Kokkos::RangePolicy<ExecSpace>(exec_, 0, gRangeSize),
         // Intentionally empty kernel body to measure launch-rate overhead.
-        KOKKOS_LAMBDA(const typename Kokkos::TeamPolicy<ExecSpace>::member_type&) {
+        KOKKOS_LAMBDA(const int) {
         });
 
     ++launchCount_;
+#if defined(BENCHMARK_ENABLE_SAMPLING)
+    if (launchCount_ % kSampleInterval == 0) {
+      const double now = CkWallTimer();
+      gapSamples_.push_back((now - lastSampleTime_) / kSampleInterval);
+      lastSampleTime_ = now;
+    }
+#endif
     hapiAddCallback(stream_, launchNextCb_);
   }
 
@@ -181,13 +191,26 @@ class BenchmarkChare : public CBase_BenchmarkChare {
   void contributeIfNeeded() {
     if (contributed_) return;
     contributed_ = true;
+#if defined(BENCHMARK_ENABLE_SAMPLING)
+    for (int i = 0; i < static_cast<int>(gapSamples_.size()); ++i) {
+      CkPrintf("chare %d sample %d: %.2f us/launch\n",
+               thisIndex, i * kSampleInterval, gapSamples_[i] * 1e6);
+    }
+#endif
     long long local = launchCount_;
     contribute(sizeof(long long), &local, CkReduction::sum_long_long,
                CkCallback(CkReductionTarget(Main, onReduction), mainProxy));
   }
 
+#if defined(BENCHMARK_ENABLE_SAMPLING)
+  static constexpr int kSampleInterval = 1000;
+  std::vector<double> gapSamples_;
+  double lastSampleTime_ = 0.0;
+#endif
+
   CkCallback launchNextCb_;
   NativeStream stream_;
+  ExecSpace exec_;
   long long launchCount_ = 0;
   bool stopRequested_ = false;
   bool contributed_ = false;

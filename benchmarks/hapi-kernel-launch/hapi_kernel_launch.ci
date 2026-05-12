@@ -1,6 +1,5 @@
 mainmodule HapiKernelLaunch {
-  readonly int gLeagueSize;
-  readonly int gTeamSize;
+  readonly int gRangeSize;
   readonly CProxy_Main mainProxy;
 
   mainchare Main {
