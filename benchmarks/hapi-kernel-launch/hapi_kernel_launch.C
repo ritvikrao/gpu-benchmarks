@@ -144,6 +144,7 @@ class BenchmarkChare : public CBase_BenchmarkChare {
  public:
   BenchmarkChare() {
     createStream(&stream_);
+    launchNextCb_ = CkCallback(CkIndex_BenchmarkChare::launchNext(), thisProxy[thisIndex]);
     contribute(CkCallback(CkReductionTarget(Main, allCharesReady), mainProxy));
   }
 
@@ -173,7 +174,7 @@ class BenchmarkChare : public CBase_BenchmarkChare {
         });
 
     ++launchCount_;
-    hapiAddCallback(stream_, CkCallback(CkIndex_BenchmarkChare::launchNext(), thisProxy[thisIndex]));
+    hapiAddCallback(stream_, launchNextCb_);
   }
 
  private:
@@ -185,6 +186,7 @@ class BenchmarkChare : public CBase_BenchmarkChare {
                CkCallback(CkReductionTarget(Main, onReduction), mainProxy));
   }
 
+  CkCallback launchNextCb_;
   NativeStream stream_;
   long long launchCount_ = 0;
   bool stopRequested_ = false;
